@@ -19,6 +19,43 @@ services:
     volumes:
       - nodeai_redisdata:/data
 
+  api:
+    build: .
+    container_name: nodeai_api
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DB_URL: postgresql://postgres:root@db:5432/knowledgehub
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: this_is_jwtSecret123
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    volumes:
+      - nodeai_uploads:/app/uploads
+    depends_on:
+      - db
+      - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  worker:
+    build: .
+    container_name: nodeai_worker
+    command: ["npm", "run", "worker:start"]
+    environment:
+      DB_URL: postgresql://postgres:root@db:5432/knowledgehub
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: this_is_jwtSecret123
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    volumes:
+      - nodeai_uploads:/app/uploads
+    depends_on:
+      - db
+      - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   nodeai_pgdata:
   nodeai_redisdata:
+  nodeai_uploads:
