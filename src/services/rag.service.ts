@@ -38,7 +38,8 @@ export async function indexDocument(documentId:number,text:string){
 
 const llm=new ChatOllama({
     model:'qwen2.5:3b',
-    baseUrl:env.OLLAMA_BASE_URL||'http://127.0.0.1:11434'
+    baseUrl:env.OLLAMA_BASE_URL||'http://127.0.0.1:11434',
+    temperature:0.1,//factual QA-less creative junk
 });
 
 export async function askDocument(documentId:number,question:string){
@@ -47,20 +48,60 @@ export async function askDocument(documentId:number,question:string){
     const vectorLiteral=`[${qVector.join(',')}]`;
 
     const result=await pool.query(
-        `SELECT content,embedding<=>$1::vector AS distance FROM chunks WHERE document_id=$2 ORDER BY embedding <=> $1::vector LIMIT 5`,[vectorLiteral,documentId]);
+        `SELECT content,embedding<=>$1::vector AS distance FROM chunks WHERE document_id=$2 ORDER BY embedding <=> $1::vector LIMIT 10`,[vectorLiteral,documentId]);
 
     if(!result.rows.length){
         throw new Error('no chunks found for this document');
     }
 
-    const context=result.rows.map((r:any)=>r.content).join('\n\n--\n\n');
-    const prompt=`Answer ONLY using the context below. If the answer is not in the context, say you do not know
+    //improv
 
-    Context:
-    ${context}
-    Question: ${question}
- Answer:`;
+    const best=Number(result.rows[0].distance);
+    //cosine distance: lower=better, tune if needed (0.55-0.75)
+    const MAX_DISTANCE=0.65;
+    const selected=result.rows.filter((r:any)=>{
+        const d=Number(r.distance);
+        return d<=MAX_DISTANCE && d<=best+0.15;
+    });
 
+    if(!selected.length){
+        return{
+            answer:
+            'The provided document does not contain enough information to answer this',
+            sources:[],
+    };
+    };
+    //improv ends
+
+    const context=selected.map((r:any,i:number)=>`[Passage${i+1}]\n${r.content}`).join('\n\n');
+
+    // const context=result.rows.map((r:any)=>r.content).join('\n\n--\n\n');
+//     const prompt=`Answer ONLY using the context below. If the answer is not in the context, say you do not know
+
+//     Context:
+//     ${context}
+//     Question: ${question}
+//  Answer:`;
+const prompt=`You are a document question-answering assistant.
+
+Answer ONLY using information explicitly contained in the provided context.
+
+Rules:
+1. Do not use outside knowledge.
+2. Do not introduce facts that are not supported by the passages.
+3. You may combine information from multiple passages only when that conclusion is directly supported by those passages.
+4. Do not invent relationships, identities, causes, or outcomes that are not supported by the passages.
+5. If the passages are not enough to answer, reply exactly:
+The provided document does not contain enough information to answer this.
+6. Prefer short, precise answers. Use the document's own terminology.
+
+Context:
+${context}
+
+Question:
+${question}
+
+Answer:`;
 
   const response = await llm.invoke(prompt);
   const answer =
@@ -69,7 +110,7 @@ export async function askDocument(documentId:number,question:string){
       : JSON.stringify(response.content);
   return {
     answer,
-    sources: result.rows.map((r: any) => r.content),
+    sources: selected.map((r: any) => r.content),
   };
 
 }
