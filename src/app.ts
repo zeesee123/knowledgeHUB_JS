@@ -4,11 +4,17 @@ import pool from './db/pool';
 import authRoutes from './routes/auth.route';
 import docRoutes from './routes/documents.route';
 import askRoutes from './routes/ask.route';
+import cors from 'cors';
+import {env} from './config/env';
 
 const app=express();
 
 
 app.use(express.json());
+
+app.use(cors({
+    origin:env.FRONTEND_URL
+}));
 
 app.get('/health',async(req,res)=>{
 

@@ -9,4 +9,5 @@ export const env={
     JWT_SECRET:process.env.JWT_SECRET!,
     REFRESH_SECRET:process.env.REFRESH_SECRET!,
     OLLAMA_BASE_URL:process.env.OLLAMA_BASE_URL,
+    FRONTEND_URL:process.env.FRONTEND_URL,
 };
